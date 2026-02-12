@@ -84,7 +84,14 @@ jobs:
     
     - name: Test DELETE book
       run: |
-        response=$(curl -s -w "\n%{http_code}" -X DELETE http://localhost:8000/api/books/2)
+        # First create a book to delete
+        create_response=$(curl -s -X POST http://localhost:8000/api/books \
+          -H "Content-Type: application/json" \
+          -d '{"title":"Book to Delete","author":"Test Author","isbn":"978-9999999999","year":2024}')
+        book_id=$(echo "$create_response" | grep -o '"id":[0-9]*' | grep -o '[0-9]*')
+        
+        # Now delete it
+        response=$(curl -s -w "\n%{http_code}" -X DELETE http://localhost:8000/api/books/$book_id)
         status=$(echo "$response" | tail -n1)
         if [ "$status" != "200" ]; then
           echo "Failed: Expected 200, got $status"
