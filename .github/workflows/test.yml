@@ -1,0 +1,118 @@
+name: API Tests
+
+on:
+  push:
+    branches: [ main, master, develop ]
+  pull_request:
+    branches: [ main, master, develop ]
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    
+    steps:
+    - name: Checkout code
+      uses: actions/checkout@v3
+    
+    - name: Setup PHP
+      uses: shivammathur/setup-php@v2
+      with:
+        php-version: '8.1'
+        extensions: json, curl
+    
+    - name: Create data directory
+      run: mkdir -p data && chmod 755 data
+    
+    - name: Start PHP server
+      run: |
+        cd api
+        php -S localhost:8000 &
+        sleep 2
+    
+    - name: Wait for server
+      run: |
+        timeout 10 bash -c 'until curl -s http://localhost:8000/api/books > /dev/null; do sleep 1; done'
+    
+    - name: Run API tests
+      run: |
+        chmod +x test_api.sh
+        ./test_api.sh
+    
+    - name: Test GET all books
+      run: |
+        response=$(curl -s -w "\n%{http_code}" http://localhost:8000/api/books)
+        status=$(echo "$response" | tail -n1)
+        if [ "$status" != "200" ]; then
+          echo "Failed: Expected 200, got $status"
+          exit 1
+        fi
+        echo "✓ GET all books: $status"
+    
+    - name: Test GET single book
+      run: |
+        response=$(curl -s -w "\n%{http_code}" http://localhost:8000/api/books/1)
+        status=$(echo "$response" | tail -n1)
+        if [ "$status" != "200" ]; then
+          echo "Failed: Expected 200, got $status"
+          exit 1
+        fi
+        echo "✓ GET single book: $status"
+    
+    - name: Test POST create book
+      run: |
+        response=$(curl -s -w "\n%{http_code}" -X POST http://localhost:8000/api/books \
+          -H "Content-Type: application/json" \
+          -d '{"title":"Test Book","author":"Test Author","isbn":"978-0000000000","year":2024}')
+        status=$(echo "$response" | tail -n1)
+        if [ "$status" != "201" ]; then
+          echo "Failed: Expected 201, got $status"
+          exit 1
+        fi
+        echo "✓ POST create book: $status"
+    
+    - name: Test PUT update book
+      run: |
+        response=$(curl -s -w "\n%{http_code}" -X PUT http://localhost:8000/api/books/1 \
+          -H "Content-Type: application/json" \
+          -d '{"title":"Updated Book","author":"Updated Author","isbn":"978-1111111111","year":2024}')
+        status=$(echo "$response" | tail -n1)
+        if [ "$status" != "200" ]; then
+          echo "Failed: Expected 200, got $status"
+          exit 1
+        fi
+        echo "✓ PUT update book: $status"
+    
+    - name: Test DELETE book
+      run: |
+        response=$(curl -s -w "\n%{http_code}" -X DELETE http://localhost:8000/api/books/2)
+        status=$(echo "$response" | tail -n1)
+        if [ "$status" != "200" ]; then
+          echo "Failed: Expected 200, got $status"
+          exit 1
+        fi
+        echo "✓ DELETE book: $status"
+    
+    - name: Test 404 not found
+      run: |
+        response=$(curl -s -w "\n%{http_code}" http://localhost:8000/api/books/9999)
+        status=$(echo "$response" | tail -n1)
+        if [ "$status" != "404" ]; then
+          echo "Failed: Expected 404, got $status"
+          exit 1
+        fi
+        echo "✓ GET non-existent book: $status"
+    
+    - name: Test validation error
+      run: |
+        response=$(curl -s -w "\n%{http_code}" -X POST http://localhost:8000/api/books \
+          -H "Content-Type: application/json" \
+          -d '{"author":"Test Author"}')
+        status=$(echo "$response" | tail -n1)
+        if [ "$status" != "400" ]; then
+          echo "Failed: Expected 400, got $status"
+          exit 1
+        fi
+        echo "✓ POST validation error: $status"
+    
+    - name: All tests passed
+      run: echo "✅ All API tests passed successfully!"
